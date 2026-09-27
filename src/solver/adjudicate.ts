@@ -3,6 +3,7 @@ import {
   compareDecimal,
   decimalOf,
   decimalToNumber,
+  formatDecimal,
   minDecimal,
   mulDecimal,
   subDecimal,
@@ -33,10 +34,13 @@ interface FlatOption {
   railId: string;
   railName: string;
   coordinate: number;
+  /** 力臂坐标的精确十进制文本，用于结果展示。 */
+  coordinateText: string;
   /** 该选项的力矩增量 = 配重质量 × 力臂（精确十进制，与搜索状态无关，预先算好）。 */
   torqueInc: Decimal;
   cost: number;
   costD: Decimal;
+  costText: string;
 }
 
 interface FlatBlock {
@@ -44,6 +48,7 @@ interface FlatBlock {
   name: string;
   mass: number;
   massD: Decimal;
+  massText: string;
   options: FlatOption[];
 }
 
@@ -97,6 +102,7 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
       name: b.name,
       mass: decimalToNumber(massD),
       massD,
+      massText: formatDecimal(massD),
       options: b.options.map((o, j) => {
         const rail = railById.get(o.railId);
         const coordinateD = coordinateById.get(o.railId);
@@ -107,9 +113,11 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
           railId: rail.id,
           railName: rail.name,
           coordinate: decimalToNumber(coordinateD),
+          coordinateText: formatDecimal(coordinateD),
           torqueInc: mulDecimal(massD, coordinateD),
           cost: decimalToNumber(costD),
           costD,
+          costText: formatDecimal(costD),
         };
       }),
     };
@@ -131,16 +139,34 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
   }
   const bestPartial: (PartialEntry | null)[] = new Array(n + 1).fill(null);
 
-  const snapshot = (costD: Decimal, minTorqueMargin: number): Plan => ({
+  const snapshot = (
+    costD: Decimal,
+    minTorqueMargin: number,
+    minMarginD: Decimal | null,
+    massD: Decimal,
+    torqueD: Decimal,
+  ): Plan => ({
     steps: steps.map((s) => ({ ...s })),
     totalCost: decimalToNumber(costD),
     minTorqueMargin,
     finalMass: steps.length > 0 ? steps[steps.length - 1].cumulativeMass : 0,
     finalTorque: steps.length > 0 ? steps[steps.length - 1].cumulativeTorque : 0,
+    totalCostText: formatDecimal(costD),
+    minTorqueMarginText: minMarginD === null ? '' : formatDecimal(minMarginD),
+    finalMassText: formatDecimal(massD),
+    finalTorqueText: formatDecimal(torqueD),
+    finalLoadMarginText: formatDecimal(subDecimal(maxLoadD, massD)),
   });
 
-  const dfs = (depth: number, massD: Decimal, torqueD: Decimal, costD: Decimal, minMargin: number): void => {
-    const current = snapshot(costD, minMargin);
+  const dfs = (
+    depth: number,
+    massD: Decimal,
+    torqueD: Decimal,
+    costD: Decimal,
+    minMargin: number,
+    minMarginD: Decimal | null,
+  ): void => {
+    const current = snapshot(costD, minMargin, minMarginD, massD, torqueD);
     const prev = bestPartial[depth];
     if (isBetter(current, prev ? prev.plan : null)) bestPartial[depth] = { plan: current, massD, torqueD };
     if (depth === n) {
@@ -156,9 +182,10 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
         const torqueAfter = addDecimal(torqueD, opt.torqueInc);
         if (compareDecimal(torqueAfter, minTorqueD) < 0) continue; // 力矩低于下端
         if (compareDecimal(torqueAfter, maxTorqueD) > 0) continue; // 力矩高于上端
-        const margin = decimalToNumber(
-          minDecimal(subDecimal(torqueAfter, minTorqueD), subDecimal(maxTorqueD, torqueAfter)),
-        );
+        const marginD = minDecimal(subDecimal(torqueAfter, minTorqueD), subDecimal(maxTorqueD, torqueAfter));
+        const margin = decimalToNumber(marginD);
+        const nextMinMarginD =
+          minMarginD === null || compareDecimal(marginD, minMarginD) < 0 ? marginD : minMarginD;
         const nextMinMargin = Math.min(minMargin, margin);
         const nextCostD = addDecimal(costD, opt.costD);
         const nextCost = decimalToNumber(nextCostD);
@@ -182,15 +209,22 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
           cumulativeTorque: decimalToNumber(torqueAfter),
           loadMargin: decimalToNumber(subDecimal(maxLoadD, massAfter)),
           torqueMargin: margin,
+          coordinateText: opt.coordinateText,
+          massText: block.massText,
+          costText: opt.costText,
+          cumulativeMassText: formatDecimal(massAfter),
+          cumulativeTorqueText: formatDecimal(torqueAfter),
+          loadMarginText: formatDecimal(subDecimal(maxLoadD, massAfter)),
+          torqueMarginText: formatDecimal(marginD),
         });
-        dfs(depth + 1, massAfter, torqueAfter, nextCostD, nextMinMargin);
+        dfs(depth + 1, massAfter, torqueAfter, nextCostD, nextMinMargin, nextMinMarginD);
         steps.pop();
         used[i] = false;
       }
     }
   };
 
-  dfs(0, ZERO, ZERO, ZERO, Number.POSITIVE_INFINITY);
+  dfs(0, ZERO, ZERO, ZERO, Number.POSITIVE_INFINITY, null);
 
   if (best) return { feasible: true, plan: best };
 
@@ -222,6 +256,8 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
           railName: opt.railName,
           massAfter: decimalToNumber(massAfter),
           torqueAfter: decimalToNumber(torqueAfter),
+          massAfterText: formatDecimal(massAfter),
+          torqueAfterText: formatDecimal(torqueAfter),
           kinds,
         });
       }

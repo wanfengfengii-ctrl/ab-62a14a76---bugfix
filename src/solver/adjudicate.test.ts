@@ -312,5 +312,52 @@ describe('adjudicate · 无可行方案的诊断', () => {
     expect(outcome.plan.totalCost).toBeCloseTo(4);
     expect(outcome.plan.finalMass).toBe(10000000000000000);
     expect(outcome.plan.steps[3].loadMargin).toBe(0);
+    // 精确文本同样显示“恰好达到上限”：最终质量 1e16、余量 0。
+    expect(outcome.plan.finalMassText).toBe('10000000000000000');
+    expect(outcome.plan.finalLoadMarginText).toBe('0');
+    expect(outcome.plan.steps[3].cumulativeMassText).toBe('10000000000000000');
+    expect(outcome.plan.steps[3].loadMarginText).toBe('0');
+  });
+
+  it('超大十进制载荷尚余 0.1：判可行，逐步数值与摘要精确一致（不得显示余量 0）', () => {
+    // 4 块 2499999999999999.975 精确合计 9999999999999999.900，距上限 1e16 尚余 0.1。
+    // 该总质量超出双精度整数表示范围（Number 会舍入为 1e16），展示必须以精确十进制
+    // 文本为准：最终质量 9999999999999999.9、载荷余量 0.1，逐步与摘要完全一致。
+    const outcome = adjudicate({
+      rails: rails(['M1', 0], ['M2', 0]),
+      blocks: [
+        block('b1', '2499999999999999.975', [[0, 0], [1, 0]]),
+        block('b2', '2499999999999999.975', [[0, 0], [1, 0]]),
+        block('b3', '2499999999999999.975', [[0, 0], [1, 0]]),
+        block('b4', '2499999999999999.975', [[0, 0], [1, 0]]),
+      ],
+      limits: limits('10000000000000000', 0, 0),
+    });
+    expect(outcome.feasible).toBe(true);
+    if (!outcome.feasible) return;
+    const { plan } = outcome;
+    expect(plan.steps).toHaveLength(4);
+    // 逐步精确文本
+    expect(plan.steps.map((s) => s.cumulativeMassText)).toEqual([
+      '2499999999999999.975',
+      '4999999999999999.95',
+      '7499999999999999.925',
+      '9999999999999999.9',
+    ]);
+    expect(plan.steps.map((s) => s.loadMarginText)).toEqual([
+      '7500000000000000.025',
+      '5000000000000000.05',
+      '2500000000000000.075',
+      '0.1',
+    ]);
+    // 摘要精确文本，与最后一步一致，且不得出现 1e16 / 余量 0
+    expect(plan.finalMassText).toBe('9999999999999999.9');
+    expect(plan.finalLoadMarginText).toBe('0.1');
+    expect(plan.finalMassText).toBe(plan.steps[3].cumulativeMassText);
+    expect(plan.finalLoadMarginText).toBe(plan.steps[3].loadMarginText);
+    // 力矩恒为 0 ∈ [0,0]，最小力矩余量精确为 0
+    expect(plan.finalTorqueText).toBe('0');
+    expect(plan.minTorqueMarginText).toBe('0');
+    expect(plan.totalCostText).toBe('0');
   });
 });

@@ -76,4 +76,27 @@ describe('parseDraft + adjudicate · 超大整数部分十进制载荷草稿', (
       expect(v.torqueAfter).toBe(0);
     }
   });
+
+  it('总质量 9999999999999999.900（尚余 0.1）判可行：逐步余量与摘要精确一致，不显示余量 0', () => {
+    const draft = hugeDraft();
+    draft.blocks.forEach((b) => {
+      b.mass = '2499999999999999.975';
+    });
+    const parsed = parseDraft(draft);
+    if ('errors' in parsed) throw new Error(`草稿应合法: ${parsed.errors.join('；')}`);
+    const outcome = adjudicate(parsed.scenario);
+    expect(outcome.feasible).toBe(true);
+    if (!outcome.feasible) return;
+    const last = outcome.plan.steps[3];
+    expect(outcome.plan.finalMassText).toBe('9999999999999999.9');
+    expect(outcome.plan.finalLoadMarginText).toBe('0.1');
+    expect(outcome.plan.steps.map((s) => s.loadMarginText)).toEqual([
+      '7500000000000000.025',
+      '5000000000000000.05',
+      '2500000000000000.075',
+      '0.1',
+    ]);
+    expect(outcome.plan.finalMassText).toBe(last!.cumulativeMassText);
+    expect(outcome.plan.finalLoadMarginText).toBe(last!.loadMarginText);
+  });
 });

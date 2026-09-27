@@ -144,6 +144,74 @@ if (!r4.feasible) {
   );
 }
 
+// 超大整数部分但尚有余量的可行场景：4 块 2499999999999999.975 精确合计
+// 9999999999999999.900，距上限 1e16 尚余 0.1（该数值超出双精度整数表示范围，
+// Number 会舍入为 1e16）。必须判可行，且逐步数值与最终摘要精确一致，
+// 不得把最终质量显示为 10000000000000000、余量显示为 0。
+const hugeFeasibleScenario: Scenario = {
+  rails: [
+    { id: 'M1', name: 'M1', coordinate: 0 },
+    { id: 'M2', name: 'M2', coordinate: 0 },
+  ],
+  blocks: [0, 1, 2, 3].map((i) => ({
+    id: `f${i}`,
+    name: `f${i}`,
+    mass: '2499999999999999.975',
+    options: [
+      { railId: 'M1', cost: 0 },
+      { railId: 'M2', cost: 0 },
+    ],
+  })),
+  limits: { maxLoad: '10000000000000000', minTorque: 0, maxTorque: 0 },
+};
+
+const r5 = adjudicate(hugeFeasibleScenario);
+check(r5.feasible, '裁决模块：超大十进制总质量 9999999999999999.900 对上限 1e16 应判定为可行');
+if (r5.feasible) {
+  const last = r5.plan.steps[r5.plan.steps.length - 1];
+  check(
+    last.cumulativeMassText === '9999999999999999.9' && last.loadMarginText === '0.1',
+    `裁决模块：末步精确数值应为已挂 9999999999999999.9、余量 0.1（实际 ${last.cumulativeMassText}、${last.loadMarginText}）`,
+  );
+  check(
+    r5.plan.finalMassText === '9999999999999999.9' && r5.plan.finalLoadMarginText === '0.1',
+    `裁决模块：摘要精确数值应为最终质量 9999999999999999.9、余量 0.1（实际 ${r5.plan.finalMassText}、${r5.plan.finalLoadMarginText}）`,
+  );
+  check(
+    r5.plan.finalMassText === last.cumulativeMassText && r5.plan.finalLoadMarginText === last.loadMarginText,
+    '裁决模块：逐步余量与摘要数值必须一致（超大十进制边界）',
+  );
+}
+
+// 真正恰好达到上限的场景：4 块 2500000000000000 合计恰为 1e16，余量文本必须为 0。
+const exactLimitScenario: Scenario = {
+  rails: [
+    { id: 'M1', name: 'M1', coordinate: 0 },
+    { id: 'M2', name: 'M2', coordinate: 0 },
+  ],
+  blocks: [0, 1, 2, 3].map((i) => ({
+    id: `e${i}`,
+    name: `e${i}`,
+    mass: '2500000000000000',
+    options: [
+      { railId: 'M1', cost: 0 },
+      { railId: 'M2', cost: 0 },
+    ],
+  })),
+  limits: { maxLoad: '10000000000000000', minTorque: 0, maxTorque: 0 },
+};
+
+const r6 = adjudicate(exactLimitScenario);
+check(r6.feasible, '裁决模块：总质量恰好为上限 1e16 应判定为可行');
+if (r6.feasible) {
+  check(
+    r6.plan.finalMassText === '10000000000000000' &&
+      r6.plan.finalLoadMarginText === '0' &&
+      r6.plan.steps[3].loadMarginText === '0',
+    '裁决模块：恰好达到上限时逐步与摘要均应显示余量 0',
+  );
+}
+
 // ---------- 2. 已启动页面健康端点冒烟 ----------
 
 const deadline = Date.now() + 60_000;

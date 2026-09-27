@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { AdjudicationOutcome, Scenario, StepRecord, ViolationKind } from '../solver/types';
-import { fmt } from '../format';
+import { fmtExact } from '../format';
 
 const KIND_LABEL: Record<ViolationKind, string> = {
   load: '总载荷超限',
@@ -21,7 +21,7 @@ function unusedOptions(scenario: Scenario, step: StepRecord) {
     .filter(({ j }) => j !== step.optionIndex)
     .map(({ o, j }) => {
       const rail = scenario.rails.find((r) => r.id === o.railId);
-      return { key: `${step.blockIndex}-${j}`, text: `${rail?.name ?? o.railId}（代价 ${fmt(o.cost)}）` };
+      return { key: `${step.blockIndex}-${j}`, text: `${rail?.name ?? o.railId}（代价 ${fmtExact(o.cost)}）` };
     });
 }
 
@@ -46,7 +46,7 @@ function StepTable({ scenario, steps, active }: { scenario: Scenario; steps: Ste
             <td>{i + 1}</td>
             <td>{s.blockName}</td>
             <td>
-              {s.railName}（力臂 {fmt(s.coordinate)}，代价 {fmt(s.cost)}）
+              {s.railName}（力臂 {s.coordinateText}，代价 {s.costText}）
             </td>
             <td>
               {unusedOptions(scenario, s).map((u) => (
@@ -55,10 +55,10 @@ function StepTable({ scenario, steps, active }: { scenario: Scenario; steps: Ste
                 </span>
               ))}
             </td>
-            <td>{fmt(s.cumulativeMass)}</td>
-            <td>{fmt(s.loadMargin)}</td>
-            <td>{fmt(s.cumulativeTorque)}</td>
-            <td>{fmt(s.torqueMargin)}</td>
+            <td>{s.cumulativeMassText}</td>
+            <td>{s.loadMarginText}</td>
+            <td>{s.cumulativeTorqueText}</td>
+            <td>{s.torqueMarginText}</td>
           </tr>
         ))}
       </tbody>
@@ -77,22 +77,22 @@ function FeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Extr
       <div className="summary">
         <div>
           <span className="k">总安装代价</span>
-          <span className="v">{fmt(plan.totalCost)}</span>
+          <span className="v">{plan.totalCostText}</span>
         </div>
         <div>
           <span className="k">最小力矩余量</span>
-          <span className="v">{fmt(plan.minTorqueMargin)}</span>
+          <span className="v">{plan.minTorqueMarginText}</span>
         </div>
         <div>
           <span className="k">最终已挂质量</span>
           <span className="v">
-            {fmt(plan.finalMass)}（余量 {fmt(Number(scenario.limits.maxLoad) - plan.finalMass)}）
+            {plan.finalMassText}（余量 {plan.finalLoadMarginText}）
           </span>
         </div>
         <div>
           <span className="k">最终力矩</span>
           <span className="v">
-            {fmt(plan.finalTorque)} ∈ [{fmt(scenario.limits.minTorque)}, {fmt(scenario.limits.maxTorque)}]
+            {plan.finalTorqueText} ∈ [{fmtExact(scenario.limits.minTorque)}, {fmtExact(scenario.limits.maxTorque)}]
           </span>
         </div>
       </div>
@@ -115,11 +115,11 @@ function FeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Extr
 
       <div className="card">
         <h3>
-          第 {idx + 1} 步：挂「{step.blockName}」（质量 {fmt(step.mass)}）
+          第 {idx + 1} 步：挂「{step.blockName}」（质量 {step.massText}）
         </h3>
         <ul>
           <li>
-            采用位置：<strong>{step.railName}</strong>（力臂 {fmt(step.coordinate)}，安装代价 {fmt(step.cost)}）
+            采用位置：<strong>{step.railName}</strong>（力臂 {step.coordinateText}，安装代价 {step.costText}）
           </li>
           <li>
             未采用位置：
@@ -131,8 +131,8 @@ function FeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Extr
             {block.options.length <= 1 && '（无）'}
           </li>
           <li>
-            本步后已挂质量 <strong>{fmt(step.cumulativeMass)}</strong>（载荷余量 {fmt(step.loadMargin)}），合力矩{' '}
-            <strong>{fmt(step.cumulativeTorque)}</strong>（力矩余量 {fmt(step.torqueMargin)}）
+            本步后已挂质量 <strong>{step.cumulativeMassText}</strong>（载荷余量 {step.loadMarginText}），合力矩{' '}
+            <strong>{step.cumulativeTorqueText}</strong>（力矩余量 {step.torqueMarginText}）
           </li>
         </ul>
       </div>
@@ -184,10 +184,10 @@ function InfeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Ex
                 <td>{v.blockName}</td>
                 <td>{v.railName}</td>
                 <td>
-                  {fmt(v.massAfter)}（上限 {fmt(scenario.limits.maxLoad)}）
+                  {v.massAfterText}（上限 {fmtExact(scenario.limits.maxLoad)}）
                 </td>
                 <td>
-                  {fmt(v.torqueAfter)}（区间 [{fmt(scenario.limits.minTorque)}, {fmt(scenario.limits.maxTorque)}]）
+                  {v.torqueAfterText}（区间 [{fmtExact(scenario.limits.minTorque)}, {fmtExact(scenario.limits.maxTorque)}]）
                 </td>
                 <td>
                   {v.kinds.map((k) => (

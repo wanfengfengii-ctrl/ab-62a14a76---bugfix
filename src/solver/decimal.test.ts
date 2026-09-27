@@ -4,6 +4,7 @@ import {
   compareDecimal,
   decimalOf,
   decimalToNumber,
+  formatDecimal,
   mulDecimal,
   parseDecimal,
   subDecimal,
@@ -64,5 +65,26 @@ describe('decimal · 精确运算', () => {
     expect(compareDecimal(torque, parseDecimal('250000000000000.0025')!)).toBe(0);
     expect(compareDecimal(parseDecimal('-0.5')!, parseDecimal('0.5')!)).toBe(-1);
     expect(compareDecimal(ZERO, parseDecimal('-0.000')!)).toBe(0);
+  });
+});
+
+describe('decimal · 精确格式化', () => {
+  it('整数、小数与去尾零', () => {
+    expect(formatDecimal(parseDecimal('0')!)).toBe('0');
+    expect(formatDecimal(parseDecimal('42')!)).toBe('42');
+    expect(formatDecimal(parseDecimal('-7.5')!)).toBe('-7.5');
+    expect(formatDecimal(parseDecimal('3.100')!)).toBe('3.1');
+    expect(formatDecimal(parseDecimal('.25')!)).toBe('0.25');
+    expect(formatDecimal(parseDecimal('-0.000')!)).toBe('0');
+  });
+
+  it('超大整数部分的小数不被双精度舍入', () => {
+    // Number('9999999999999999.9') === 1e16，精确格式化必须保留 .9。
+    expect(formatDecimal(parseDecimal('9999999999999999.900')!)).toBe('9999999999999999.9');
+    expect(formatDecimal(parseDecimal('10000000000000000')!)).toBe('10000000000000000');
+    expect(formatDecimal(parseDecimal('7500000000000000.075')!)).toBe('7500000000000000.075');
+    // 恰好达到上限时余量文本为 0；真实余量 0.1 时文本不得显示为 0。
+    expect(formatDecimal(subDecimal(parseDecimal('10000000000000000')!, parseDecimal('9999999999999999.9')!))).toBe('0.1');
+    expect(formatDecimal(subDecimal(parseDecimal('10000000000000000')!, parseDecimal('10000000000000000')!))).toBe('0');
   });
 });

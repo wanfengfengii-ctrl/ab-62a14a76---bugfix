@@ -109,3 +109,21 @@ export function minDecimal(a: Decimal, b: Decimal): Decimal {
 export function decimalToNumber(d: Decimal): number {
   return Number(`${d.units.toString()}e${-d.scale}`);
 }
+
+/**
+ * 格式化为规范十进制文本（无指数、无多余尾零、负零归一）。
+ * 用于结果展示：即使整数部分超出双精度表示范围
+ * （如 9999999999999999.9，Number 会舍入为 10000000000000000），
+ * 展示的逐步数值与摘要仍与精确裁决结果完全一致。
+ */
+export function formatDecimal(d: Decimal): string {
+  if (d.units === 0n) return '0';
+  const negative = d.units < 0n;
+  const digits = (negative ? -d.units : d.units).toString();
+  const sign = negative ? '-' : '';
+  if (d.scale === 0) return `${sign}${digits}`;
+  const int = digits.length > d.scale ? digits.slice(0, digits.length - d.scale) : '0';
+  let frac = digits.length > d.scale ? digits.slice(digits.length - d.scale) : digits.padStart(d.scale, '0');
+  frac = frac.replace(/0+$/, '');
+  return frac ? `${sign}${int}.${frac}` : `${sign}${int}`;
+}
