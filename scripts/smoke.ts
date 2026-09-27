@@ -144,6 +144,67 @@ if (!r4.feasible) {
   );
 }
 
+// 超大整数部分但仍有 0.1 余量的可行场景：4 块 2499999999999999.975 精确合计
+// 9999999999999999.900（双精度会舍入成 1e16），真实载荷余量 0.1，必须判可行；
+// 逐步余量与最终摘要须一致显示精确质量 9999999999999999.9 与余量 0.1。
+const hugeFeasibleScenario: Scenario = {
+  rails: [
+    { id: 'M1', name: 'M1', coordinate: 0 },
+    { id: 'M2', name: 'M2', coordinate: 0 },
+  ],
+  blocks: [0, 1, 2, 3].map((i) => ({
+    id: `f${i}`,
+    name: `f${i}`,
+    mass: '2499999999999999.975',
+    options: [
+      { railId: 'M1', cost: 0 },
+      { railId: 'M2', cost: 0 },
+    ],
+  })),
+  limits: { maxLoad: '10000000000000000', minTorque: 0, maxTorque: 0 },
+};
+
+const r5 = adjudicate(hugeFeasibleScenario);
+check(r5.feasible, '裁决模块：超大十进制总质量 9999999999999999.900（余量 0.1）应判定为可行');
+if (r5.feasible) {
+  const lastStep = r5.plan.steps[r5.plan.steps.length - 1];
+  check(
+    lastStep.exact.cumulativeMass === '9999999999999999.9' && lastStep.exact.loadMargin === '0.1',
+    `裁决模块：逐步信息应精确显示质量 9999999999999999.9 与余量 0.1（实际 ${lastStep.exact.cumulativeMass}，余量 ${lastStep.exact.loadMargin}）`,
+  );
+  check(
+    r5.plan.exact.finalMass === '9999999999999999.9' &&
+      r5.plan.exact.loadMargin === '0.1' &&
+      r5.plan.exact.finalMass === lastStep.exact.cumulativeMass &&
+      r5.plan.exact.loadMargin === lastStep.exact.loadMargin,
+    `裁决模块：摘要应与逐步一致（实际质量 ${r5.plan.exact.finalMass}，余量 ${r5.plan.exact.loadMargin}）`,
+  );
+}
+
+// 对照：真正恰好达到上限（4 × 2500000000000000 = 1e16）仍判可行且余量精确为 0。
+const hugeExactScenario: Scenario = {
+  rails: [
+    { id: 'M1', name: 'M1', coordinate: 0 },
+    { id: 'M2', name: 'M2', coordinate: 0 },
+  ],
+  blocks: [0, 1, 2, 3].map((i) => ({
+    id: `x${i}`,
+    name: `x${i}`,
+    mass: '2500000000000000',
+    options: [
+      { railId: 'M1', cost: 0 },
+      { railId: 'M2', cost: 0 },
+    ],
+  })),
+  limits: { maxLoad: '10000000000000000', minTorque: 0, maxTorque: 0 },
+};
+
+const r6 = adjudicate(hugeExactScenario);
+check(
+  r6.feasible && r6.plan.exact.finalMass === '10000000000000000' && r6.plan.exact.loadMargin === '0',
+  '裁决模块：恰好达到上限的方案应判可行且余量精确显示 0',
+);
+
 // ---------- 2. 已启动页面健康端点冒烟 ----------
 
 const deadline = Date.now() + 60_000;

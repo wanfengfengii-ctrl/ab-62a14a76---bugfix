@@ -46,7 +46,7 @@ function StepTable({ scenario, steps, active }: { scenario: Scenario; steps: Ste
             <td>{i + 1}</td>
             <td>{s.blockName}</td>
             <td>
-              {s.railName}（力臂 {fmt(s.coordinate)}，代价 {fmt(s.cost)}）
+              {s.railName}（力臂 {fmt(s.exact.coordinate)}，代价 {fmt(s.exact.cost)}）
             </td>
             <td>
               {unusedOptions(scenario, s).map((u) => (
@@ -55,10 +55,10 @@ function StepTable({ scenario, steps, active }: { scenario: Scenario; steps: Ste
                 </span>
               ))}
             </td>
-            <td>{fmt(s.cumulativeMass)}</td>
-            <td>{fmt(s.loadMargin)}</td>
-            <td>{fmt(s.cumulativeTorque)}</td>
-            <td>{fmt(s.torqueMargin)}</td>
+            <td>{fmt(s.exact.cumulativeMass)}</td>
+            <td>{fmt(s.exact.loadMargin)}</td>
+            <td>{fmt(s.exact.cumulativeTorque)}</td>
+            <td>{fmt(s.exact.torqueMargin)}</td>
           </tr>
         ))}
       </tbody>
@@ -77,22 +77,23 @@ function FeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Extr
       <div className="summary">
         <div>
           <span className="k">总安装代价</span>
-          <span className="v">{fmt(plan.totalCost)}</span>
+          <span className="v">{fmt(plan.exact.totalCost)}</span>
         </div>
         <div>
           <span className="k">最小力矩余量</span>
-          <span className="v">{fmt(plan.minTorqueMargin)}</span>
+          <span className="v">{fmt(plan.exact.minTorqueMargin)}</span>
         </div>
         <div>
           <span className="k">最终已挂质量</span>
           <span className="v">
-            {fmt(plan.finalMass)}（余量 {fmt(Number(scenario.limits.maxLoad) - plan.finalMass)}）
+            {/* 余量直接取方案的精确同源值（= 最后一步的载荷余量），不再用双精度重算。 */}
+            {fmt(plan.exact.finalMass)}（余量 {fmt(plan.exact.loadMargin)}）
           </span>
         </div>
         <div>
           <span className="k">最终力矩</span>
           <span className="v">
-            {fmt(plan.finalTorque)} ∈ [{fmt(scenario.limits.minTorque)}, {fmt(scenario.limits.maxTorque)}]
+            {fmt(plan.exact.finalTorque)} ∈ [{fmt(scenario.limits.minTorque)}, {fmt(scenario.limits.maxTorque)}]
           </span>
         </div>
       </div>
@@ -115,11 +116,11 @@ function FeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Extr
 
       <div className="card">
         <h3>
-          第 {idx + 1} 步：挂「{step.blockName}」（质量 {fmt(step.mass)}）
+          第 {idx + 1} 步：挂「{step.blockName}」（质量 {fmt(step.exact.mass)}）
         </h3>
         <ul>
           <li>
-            采用位置：<strong>{step.railName}</strong>（力臂 {fmt(step.coordinate)}，安装代价 {fmt(step.cost)}）
+            采用位置：<strong>{step.railName}</strong>（力臂 {fmt(step.exact.coordinate)}，安装代价 {fmt(step.exact.cost)}）
           </li>
           <li>
             未采用位置：
@@ -131,8 +132,8 @@ function FeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Extr
             {block.options.length <= 1 && '（无）'}
           </li>
           <li>
-            本步后已挂质量 <strong>{fmt(step.cumulativeMass)}</strong>（载荷余量 {fmt(step.loadMargin)}），合力矩{' '}
-            <strong>{fmt(step.cumulativeTorque)}</strong>（力矩余量 {fmt(step.torqueMargin)}）
+            本步后已挂质量 <strong>{fmt(step.exact.cumulativeMass)}</strong>（载荷余量 {fmt(step.exact.loadMargin)}），合力矩{' '}
+            <strong>{fmt(step.exact.cumulativeTorque)}</strong>（力矩余量 {fmt(step.exact.torqueMargin)}）
           </li>
         </ul>
       </div>
@@ -184,10 +185,10 @@ function InfeasibleView({ scenario, outcome }: { scenario: Scenario; outcome: Ex
                 <td>{v.blockName}</td>
                 <td>{v.railName}</td>
                 <td>
-                  {fmt(v.massAfter)}（上限 {fmt(scenario.limits.maxLoad)}）
+                  {fmt(v.exact.massAfter)}（上限 {fmt(scenario.limits.maxLoad)}）
                 </td>
                 <td>
-                  {fmt(v.torqueAfter)}（区间 [{fmt(scenario.limits.minTorque)}, {fmt(scenario.limits.maxTorque)}]）
+                  {fmt(v.exact.torqueAfter)}（区间 [{fmt(scenario.limits.minTorque)}, {fmt(scenario.limits.maxTorque)}]）
                 </td>
                 <td>
                   {v.kinds.map((k) => (

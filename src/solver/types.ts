@@ -60,6 +60,20 @@ export interface StepRecord {
   loadMargin: number;
   /** 力矩余量 = min(力矩 - 下限, 上限 - 力矩)，即力矩到闭区间边界的最短距离。 */
   torqueMargin: number;
+  /**
+   * 上述各数值按录入十进制值计算的精确文本（BigInt 定点，无双精度舍入）。
+   * number 字段仅用于决胜启发式与既有比较；展示必须使用本字段，
+   * 否则整数部分超出双精度范围时（如 9999999999999999.9）会被舍入成上限值。
+   */
+  exact: {
+    coordinate: string;
+    mass: string;
+    cost: string;
+    cumulativeMass: string;
+    cumulativeTorque: string;
+    loadMargin: string;
+    torqueMargin: string;
+  };
 }
 
 /** 一套完整方案：每块配重恰用一次的位置 + 完整挂装次序。 */
@@ -70,6 +84,15 @@ export interface Plan {
   minTorqueMargin: number;
   finalMass: number;
   finalTorque: number;
+  /** 方案级汇总数值的精确文本（与逐步记录同源，避免摘要与逐步信息矛盾）。 */
+  exact: {
+    totalCost: string;
+    minTorqueMargin: string;
+    finalMass: string;
+    finalTorque: string;
+    /** 最终载荷余量 = 总载荷上限 - 最终已挂质量，与最后一步的 loadMargin 一致。 */
+    loadMargin: string;
+  };
 }
 
 export type ViolationKind = 'load' | 'torque-low' | 'torque-high';
@@ -84,6 +107,11 @@ export interface Violation {
   massAfter: number;
   torqueAfter: number;
   kinds: ViolationKind[];
+  /** 挂后质量/力矩的精确十进制文本（展示用）。 */
+  exact: {
+    massAfter: string;
+    torqueAfter: string;
+  };
 }
 
 /** 无可行方案时的诊断报告。 */

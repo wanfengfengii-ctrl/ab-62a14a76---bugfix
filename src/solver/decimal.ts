@@ -20,7 +20,7 @@ const EXPONENT_LIMIT = 9999;
 const DECIMAL_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 /** 去掉末尾的十进制零，保持最简表示（scale 最小，零的符号归一）。 */
-function normalize(units: bigint, scale: number): Decimal {
+export function normalizeDecimal(units: bigint, scale: number): Decimal {
   if (units === 0n) return ZERO;
   let u = units;
   let s = scale;
@@ -54,7 +54,7 @@ export function parseDecimal(raw: string): Decimal | null {
     units *= 10n ** BigInt(-scale);
     scale = 0;
   }
-  return normalize(units, scale);
+  return normalizeDecimal(units, scale);
 }
 
 /**
@@ -74,7 +74,7 @@ export function addDecimal(a: Decimal, b: Decimal): Decimal {
   const scale = Math.max(a.scale, b.scale);
   const au = a.units * 10n ** BigInt(scale - a.scale);
   const bu = b.units * 10n ** BigInt(scale - b.scale);
-  return normalize(au + bu, scale);
+  return normalizeDecimal(au + bu, scale);
 }
 
 export function negateDecimal(d: Decimal): Decimal {
@@ -86,7 +86,7 @@ export function subDecimal(a: Decimal, b: Decimal): Decimal {
 }
 
 export function mulDecimal(a: Decimal, b: Decimal): Decimal {
-  return normalize(a.units * b.units, a.scale + b.scale);
+  return normalizeDecimal(a.units * b.units, a.scale + b.scale);
 }
 
 /** 比较：a < b 返回 -1，a = b 返回 0，a > b 返回 1。 */
@@ -109,3 +109,46 @@ export function minDecimal(a: Decimal, b: Decimal): Decimal {
 export function decimalToNumber(d: Decimal): number {
   return Number(`${d.units.toString()}e${-d.scale}`);
 }
+
+/**
+ * 转为精确十进制文本（canonical，如 9999999999999999.9、-0.025、0、1000）。
+ * 与 decimalToNumber 不同，整数部分再大也不发生双精度舍入，
+ * 因此超大数边界处的展示值与安全边界判定所依据的精确值完全一致。
+ */
+export function decimalToString(d: Decimal): string {
+  if (d.units === 0n) return '0';
+  const negative = d.units < 0n;
+  const digits = (negative ? -d.units : d.units).toString();
+  let body: string;
+  if (d.scale === 0) {
+    body = digits;
+  } else if (d.scale < digits.length) {
+    const cut = digits.length - d.scale;
+    body = `${digits.slice(0, cut)}.${digits.slice(cut)}`;
+  } else {
+    body = `0.${'0'.repeat(d.scale - digits.length)}${digits}`;
+  }
+  return negative ? `-${body}` : body;
+}
+
+/**
+ * 按录入的十进制值精确舍入到 frac 位小数（四舍五入，半数远离零），
+ * 返回去掉多余尾零的精确文本；frac 必须为非负整数。
+ * 不经过双精度，避免 1e16 量级处 0.1 的余量被舍入吞没。
+ */
+export function formatDecimal(d: Decimal, frac = 3): string {
+  if (!Number.isInteger(frac) || frac < 0) throw new Error('frac 须为非负整数');
+  if (d.scale <= frac) {
+    // 小数位本就不多：canonical 文本即结果（normalize 已去掉尾零）。
+    return decimalToString(d);
+  }
+  const factor = 10n ** BigInt(d.scale - frac);
+  const half = factor / 2n; // factor 为 10 的幂（偶数），半数恰为整数
+  const negative = d.units < 0n;
+  const abs = negative ? -d.units : d.units;
+  let q = abs / factor;
+  const r = abs % factor;
+  if (r >= half) q += 1n; // 四舍五入（半数远离零）
+  return decimalToString(normalizeDecimal(negative ? -q : q, frac));
+}
+

@@ -312,5 +312,44 @@ describe('adjudicate · 无可行方案的诊断', () => {
     expect(outcome.plan.totalCost).toBeCloseTo(4);
     expect(outcome.plan.finalMass).toBe(10000000000000000);
     expect(outcome.plan.steps[3].loadMargin).toBe(0);
+    // 真正恰好达到上限：精确文本同样显示质量 10000000000000000 与余量 0。
+    expect(outcome.plan.exact.finalMass).toBe('10000000000000000');
+    expect(outcome.plan.exact.loadMargin).toBe('0');
+    expect(outcome.plan.steps[3].exact.cumulativeMass).toBe('10000000000000000');
+    expect(outcome.plan.steps[3].exact.loadMargin).toBe('0');
   });
+
+  it('超大十进制载荷余量 0.1：判可行且逐步余量与摘要数值精确一致', () => {
+    // 回归：4 块 2499999999999999.975 精确总质量为 9999999999999999.900，
+    // 距上限 10000000000000000 的真实余量为 0.1，应判可行。
+    // 该总质量的整数部分超出双精度表示范围（Number 舍入为上限值），
+    // 逐步记录与最终摘要必须都显示 9999999999999999.9 与余量 0.1，不得自相矛盾。
+    const outcome = adjudicate({
+      rails: rails(['M1', 0], ['M2', 0]),
+      blocks: [
+        block('b1', '2499999999999999.975', [[0, 0], [1, 0]]),
+        block('b2', '2499999999999999.975', [[0, 0], [1, 0]]),
+        block('b3', '2499999999999999.975', [[0, 0], [1, 0]]),
+        block('b4', '2499999999999999.975', [[0, 0], [1, 0]]),
+      ],
+      limits: limits('10000000000000000', 0, 0),
+    });
+    expect(outcome.feasible).toBe(true);
+    if (!outcome.feasible) return;
+    expect(outcome.plan.steps).toHaveLength(4);
+    // 逐步精确值：前三块 7499999999999999.925，最后一块 9999999999999999.9。
+    expect(outcome.plan.steps[2].exact.cumulativeMass).toBe('7499999999999999.925');
+    expect(outcome.plan.steps[2].exact.loadMargin).toBe('2500000000000000.075');
+    const last = outcome.plan.steps[3];
+    expect(last.exact.cumulativeMass).toBe('9999999999999999.9');
+    expect(last.exact.loadMargin).toBe('0.1');
+    expect(last.exact.cumulativeTorque).toBe('0');
+    expect(last.exact.torqueMargin).toBe('0');
+    // 摘要与最后一步同源一致（修复前摘要显示 10000000000000000 与“余量 0”）。
+    expect(outcome.plan.exact.finalMass).toBe('9999999999999999.9');
+    expect(outcome.plan.exact.loadMargin).toBe('0.1');
+    expect(outcome.plan.exact.finalMass).toBe(last.exact.cumulativeMass);
+    expect(outcome.plan.exact.loadMargin).toBe(last.exact.loadMargin);
+  });
+
 });

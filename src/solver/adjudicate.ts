@@ -3,6 +3,7 @@ import {
   compareDecimal,
   decimalOf,
   decimalToNumber,
+  decimalToString,
   minDecimal,
   mulDecimal,
   subDecimal,
@@ -33,6 +34,7 @@ interface FlatOption {
   railId: string;
   railName: string;
   coordinate: number;
+  coordinateD: Decimal;
   /** 该选项的力矩增量 = 配重质量 × 力臂（精确十进制，与搜索状态无关，预先算好）。 */
   torqueInc: Decimal;
   cost: number;
@@ -107,6 +109,7 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
           railId: rail.id,
           railName: rail.name,
           coordinate: decimalToNumber(coordinateD),
+          coordinateD,
           torqueInc: mulDecimal(massD, coordinateD),
           cost: decimalToNumber(costD),
           costD,
@@ -131,16 +134,31 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
   }
   const bestPartial: (PartialEntry | null)[] = new Array(n + 1).fill(null);
 
-  const snapshot = (costD: Decimal, minTorqueMargin: number): Plan => ({
-    steps: steps.map((s) => ({ ...s })),
-    totalCost: decimalToNumber(costD),
-    minTorqueMargin,
-    finalMass: steps.length > 0 ? steps[steps.length - 1].cumulativeMass : 0,
-    finalTorque: steps.length > 0 ? steps[steps.length - 1].cumulativeTorque : 0,
-  });
+  const snapshot = (costD: Decimal, minTorqueMargin: number, minTorqueMarginD: Decimal | null): Plan => {
+    const last = steps[steps.length - 1];
+    const finalMass = last ? last.cumulativeMass : 0;
+    const finalTorque = last ? last.cumulativeTorque : 0;
+    return {
+      steps: steps.map((s) => ({ ...s, exact: { ...s.exact } })),
+      totalCost: decimalToNumber(costD),
+      minTorqueMargin,
+      finalMass,
+      finalTorque,
+      // 摘要数值与逐步记录同源：最终质量/力矩/载荷余量直接取最后一步，
+      // 不再由双精度数重算，避免 1e16 量级舍入导致摘要与逐步矛盾。
+      exact: {
+        totalCost: decimalToString(costD),
+        minTorqueMargin: minTorqueMarginD === null ? '0' : decimalToString(minTorqueMarginD),
+        finalMass: last ? last.exact.cumulativeMass : '0',
+        finalTorque: last ? last.exact.cumulativeTorque : '0',
+        loadMargin: last ? last.exact.loadMargin : '0',
+      },
+    };
+  };
 
-  const dfs = (depth: number, massD: Decimal, torqueD: Decimal, costD: Decimal, minMargin: number): void => {
-    const current = snapshot(costD, minMargin);
+  const dfs = (depth: number, massD: Decimal, torqueD: Decimal, costD: Decimal, minMarginD: Decimal | null): void => {
+    const minMargin = minMarginD === null ? Number.POSITIVE_INFINITY : decimalToNumber(minMarginD);
+    const current = snapshot(costD, minMargin, minMarginD);
     const prev = bestPartial[depth];
     if (isBetter(current, prev ? prev.plan : null)) bestPartial[depth] = { plan: current, massD, torqueD };
     if (depth === n) {
@@ -156,9 +174,11 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
         const torqueAfter = addDecimal(torqueD, opt.torqueInc);
         if (compareDecimal(torqueAfter, minTorqueD) < 0) continue; // 力矩低于下端
         if (compareDecimal(torqueAfter, maxTorqueD) > 0) continue; // 力矩高于上端
-        const margin = decimalToNumber(
-          minDecimal(subDecimal(torqueAfter, minTorqueD), subDecimal(maxTorqueD, torqueAfter)),
-        );
+        const marginD = minDecimal(subDecimal(torqueAfter, minTorqueD), subDecimal(maxTorqueD, torqueAfter));
+        const margin = decimalToNumber(marginD);
+        // 精确的力矩余量最小值（BigInt 比较），不再依赖 Math.min 的双精度结果；
+        // null 表示尚无已挂步骤（余量视为 +∞）。
+        const nextMinMarginD = minMarginD === null || compareDecimal(minMarginD, marginD) > 0 ? marginD : minMarginD;
         const nextMinMargin = Math.min(minMargin, margin);
         const nextCostD = addDecimal(costD, opt.costD);
         const nextCost = decimalToNumber(nextCostD);
@@ -168,6 +188,7 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
           // 余量无法严格更优且代价已严格更差，剪枝。
           if (nextMinMargin < best.minTorqueMargin + EPS && nextCost > best.totalCost + EPS) continue;
         }
+        const loadMarginD = subDecimal(maxLoadD, massAfter);
         used[i] = true;
         steps.push({
           blockIndex: i,
@@ -180,17 +201,26 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
           cost: opt.cost,
           cumulativeMass: decimalToNumber(massAfter),
           cumulativeTorque: decimalToNumber(torqueAfter),
-          loadMargin: decimalToNumber(subDecimal(maxLoadD, massAfter)),
+          loadMargin: decimalToNumber(loadMarginD),
           torqueMargin: margin,
+          exact: {
+            coordinate: decimalToString(opt.coordinateD),
+            mass: decimalToString(block.massD),
+            cost: decimalToString(opt.costD),
+            cumulativeMass: decimalToString(massAfter),
+            cumulativeTorque: decimalToString(torqueAfter),
+            loadMargin: decimalToString(loadMarginD),
+            torqueMargin: decimalToString(marginD),
+          },
         });
-        dfs(depth + 1, massAfter, torqueAfter, nextCostD, nextMinMargin);
+        dfs(depth + 1, massAfter, torqueAfter, nextCostD, nextMinMarginD);
         steps.pop();
         used[i] = false;
       }
     }
   };
 
-  dfs(0, ZERO, ZERO, ZERO, Number.POSITIVE_INFINITY);
+  dfs(0, ZERO, ZERO, ZERO, null);
 
   if (best) return { feasible: true, plan: best };
 
@@ -223,6 +253,10 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
           massAfter: decimalToNumber(massAfter),
           torqueAfter: decimalToNumber(torqueAfter),
           kinds,
+          exact: {
+            massAfter: decimalToString(massAfter),
+            torqueAfter: decimalToString(torqueAfter),
+          },
         });
       }
     }

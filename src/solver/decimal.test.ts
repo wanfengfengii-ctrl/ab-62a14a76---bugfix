@@ -4,6 +4,8 @@ import {
   compareDecimal,
   decimalOf,
   decimalToNumber,
+  decimalToString,
+  formatDecimal,
   mulDecimal,
   parseDecimal,
   subDecimal,
@@ -64,5 +66,33 @@ describe('decimal · 精确运算', () => {
     expect(compareDecimal(torque, parseDecimal('250000000000000.0025')!)).toBe(0);
     expect(compareDecimal(parseDecimal('-0.5')!, parseDecimal('0.5')!)).toBe(-1);
     expect(compareDecimal(ZERO, parseDecimal('-0.000')!)).toBe(0);
+  });
+});
+
+describe('decimal · 精确文本与精确舍入', () => {
+  it('decimalToString：常规数、零与负数输出 canonical 文本', () => {
+    expect(decimalToString(parseDecimal('9999999999999999.900')!)).toBe('9999999999999999.9');
+    expect(decimalToString(parseDecimal('10000000000000000')!)).toBe('10000000000000000');
+    expect(decimalToString(parseDecimal('0.100')!)).toBe('0.1');
+    expect(decimalToString(parseDecimal('0')!)).toBe('0');
+    expect(decimalToString(parseDecimal('-0.025')!)).toBe('-0.025');
+    expect(decimalToString(parseDecimal('1.50')!)).toBe('1.5');
+    expect(decimalToString(parseDecimal('1000')!)).toBe('1000');
+  });
+
+  it('formatDecimal：BigInt 精确四舍五入到指定位数，不经过双精度', () => {
+    // 超大数边界：0.1 与 0 的区别不得被双精度舍入吞没
+    expect(formatDecimal(parseDecimal('9999999999999999.9')!, 3)).toBe('9999999999999999.9');
+    expect(formatDecimal(parseDecimal('0.1')!, 3)).toBe('0.1');
+    expect(formatDecimal(parseDecimal('0')!, 3)).toBe('0');
+    // 四舍五入（半数远离零）与去尾零
+    expect(formatDecimal(parseDecimal('1.2345')!, 3)).toBe('1.235');
+    expect(formatDecimal(parseDecimal('1.2344')!, 3)).toBe('1.234');
+    expect(formatDecimal(parseDecimal('-1.2345')!, 3)).toBe('-1.235');
+    expect(formatDecimal(parseDecimal('1.2300')!, 3)).toBe('1.23');
+    expect(formatDecimal(parseDecimal('1.234')!, 0)).toBe('1');
+    expect(formatDecimal(parseDecimal('1.5')!, 0)).toBe('2');
+    // 超大整数部分 + 需要舍入的小数
+    expect(formatDecimal(parseDecimal('9999999999999999.9996')!, 3)).toBe('10000000000000000');
   });
 });
